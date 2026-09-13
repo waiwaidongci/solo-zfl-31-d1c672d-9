@@ -9,14 +9,22 @@
     body { margin: 0; font-family: Arial, "PingFang SC", sans-serif; background: #f3efe7; color: #282018; }
     header { padding: 18px 24px; background: #fffaf2; border-bottom: 1px solid #d9cdbc; display: flex; justify-content: space-between; gap: 16px; align-items: center; }
     h1 { margin: 0; font-size: 26px; }
+    h2 { font-size: 16px; margin: 16px 0 8px; }
     button { border: 0; border-radius: 8px; padding: 10px 13px; background: #8d3e37; color: #fff; font-weight: 800; cursor: pointer; }
     button.secondary { background: #71675c; }
+    button:disabled { background: #c9bdae; color: #f6f0e7; cursor: not-allowed; }
     input, select { width: 100%; border: 1px solid #d9cdbc; border-radius: 6px; padding: 9px; font: inherit; background: #fff; }
     label { display: block; margin: 9px 0 5px; color: #76695e; font-size: 13px; }
-    .app { display: grid; grid-template-columns: 280px 1fr 320px; gap: 16px; padding: 16px; }
-    .panel { background: #fffaf2; border: 1px solid #d9cdbc; border-radius: 8px; padding: 14px; }
-    .grid { display: grid; gap: 2px; margin: 0 auto; width: min(100%, 720px); border: 6px solid #72533c; background: #72533c; }
-    .cell { aspect-ratio: 1; background: #f8ead2; cursor: pointer; border-radius: 2px; }
+    .app { display: grid; grid-template-columns: 280px 1fr 340px; gap: 16px; padding: 16px; }
+    .panel { background: #fffaf2; border: 1px solid #d9cdbc; border-radius: 8px; padding: 14px; align-self: start; }
+    .gridwrap { overflow: auto; }
+    .grid { display: grid; gap: 2px; margin: 0 auto; width: min(100%, 720px); border: 6px solid #72533c; background: #72533c; user-select: none; touch-action: none; }
+    .cell { aspect-ratio: 1; background: #f8ead2; cursor: pointer; border-radius: 2px; position: relative; outline: 2px solid transparent; outline-offset: -2px; }
+    .cell.sel { outline-color: #1f5f78; }
+    .cell.src { outline-color: #d6a437; outline-style: dashed; }
+    .cell.ghost { outline: 3px dashed #1f5f78; }
+    .cell.conflict { outline: 3px solid #a03a2e; background-image: repeating-linear-gradient(45deg, rgba(160,58,46,.45) 0 4px, transparent 4px 8px); }
+    .cell.locked::after { content: "🔒"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; background: rgba(30,27,24,.35); color: #fff; border-radius: 2px; }
     .palette { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
     .swatch { aspect-ratio: 1; border-radius: 8px; border: 3px solid transparent; cursor: pointer; }
     .swatch.active { border-color: #1f1b16; }
@@ -26,13 +34,25 @@
     .preview { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; border: 1px solid #d9cdbc; padding: 6px; margin-top: 8px; }
     .mini { aspect-ratio: 1; border-radius: 2px; }
     .toolbar { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .tools button.active { background: #1f5f78; }
+    .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .paste-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .checkline { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 13px; color: #5c5148; }
+    .checkline input { width: auto; }
+    #message { min-height: 40px; margin: 10px 0; padding: 8px 10px; border-radius: 6px; background: #f3ead9; border: 1px solid #e1d5c5; font-size: 13px; }
+    #message.info { background: #e9f0f3; border-color: #b9ccd6; color: #22485a; }
+    #message.ok { background: #e9f1e7; border-color: #bccfba; color: #2f5032; }
+    #message.warn { background: #f8e6e3; border-color: #d9aca6; color: #a03a2e; font-weight: 800; }
+    .clip { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; border: 1px solid #d9cdbc; padding: 6px; margin-top: 6px; }
+    .hint { font-size: 12px; color: #8a7d70; margin: 6px 0; }
     .warning { color: #a03a2e; font-weight: 800; }
-    @media (max-width: 1000px) { header { display: block; } .app { grid-template-columns: 1fr; } }
+    @media (max-width: 1100px) { header { display: block; } .app { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
   <header>
-    <div><h1>手工织锦纹样排版台</h1><div>绘制经纬网格纹样，统计色线用量并保存方案。</div></div>
+    <div><h1>手工织锦纹样排版台</h1><div>逐格绘制经纬纹样，矩形选区剪贴、翻转旋转、按行列铺版，并统计色线用量。</div></div>
     <div class="toolbar"><button id="saveBtn">保存方案</button><button id="exportBtn" class="secondary">导出JSON</button></div>
   </header>
   <main class="app">
@@ -41,6 +61,13 @@
       <label>经向列数</label><input id="cols" type="number" value="18" min="6" max="36">
       <label>纬向行数</label><input id="rows" type="number" value="14" min="6" max="32">
       <button id="newBtn">新建网格</button>
+      <h2>工具</h2>
+      <div class="tools">
+        <button id="toolDraw" class="active">绘制</button>
+        <button id="toolSelect" class="secondary">框选</button>
+        <button id="toolLock" class="secondary">锁格</button>
+      </div>
+      <p class="hint" id="toolHint">绘制工具：单击或拖动逐格填色；选背景色可擦除。</p>
       <h2>色线库</h2>
       <div class="palette" id="palette"></div>
       <h2>基础纹样块</h2>
@@ -50,85 +77,667 @@
         <button data-block="diamond" class="secondary">小菱形</button>
       </div>
     </aside>
-    <section class="panel"><div class="grid" id="grid"></div></section>
+    <section class="panel">
+      <div id="message" class="info">就绪。先用矩形框选工具选中纹样，再在右侧移动、复制或铺版。</div>
+      <div class="gridwrap"><div class="grid" id="grid"></div></div>
+    </section>
     <aside class="panel">
-      <h2>操作</h2>
+      <h2>撤销</h2>
       <div class="toolbar"><button id="undoBtn" class="secondary">撤销</button><button id="redoBtn" class="secondary">重做</button></div>
-      <p>点击填色，按住拖动可连续填色。</p>
+
+      <h2>选区</h2>
+      <div class="hint" id="selInfo">尚未框选。</div>
+      <div class="toolbar">
+        <button id="copyBtn" class="secondary" disabled>复制</button>
+        <button id="cutBtn" class="secondary" disabled>剪切</button>
+      </div>
+      <div class="toolbar" style="margin-top:8px">
+        <button id="moveSelBtn" disabled>移动到…</button>
+        <button id="copySelBtn" disabled>复制到…</button>
+      </div>
+      <h2 style="margin-top:10px">翻转与旋转（对选中纹样整体生效）</h2>
+      <div class="row3">
+        <button id="flipHBtn" class="secondary" disabled>水平翻转</button>
+        <button id="flipVBtn" class="secondary" disabled>垂直翻转</button>
+        <button id="rotBtn" class="secondary" disabled>顺时针旋转</button>
+      </div>
+
+      <h2>剪贴板与铺版</h2>
+      <div class="hint" id="clipInfo">剪贴板为空。</div>
+      <div class="clip" id="clipPreview"></div>
+      <div class="paste-grid">
+        <div><label>目标列(左起)</label><input id="pasteX" type="number" value="1" min="1"></div>
+        <div><label>目标行(上起)</label><input id="pasteY" type="number" value="1" min="1"></div>
+        <div><label>铺版列数</label><input id="repCols" type="number" value="1" min="1" max="36"></div>
+        <div><label>铺版行数</label><input id="repRows" type="number" value="1" min="1" max="32"></div>
+      </div>
+      <label class="checkline"><input id="allowOver" type="checkbox">允许覆盖已有非锁定纹样</label>
+      <div class="toolbar">
+        <button id="pasteBtn" class="secondary" disabled>粘贴一次</button>
+        <button id="tileBtn" disabled>按行列铺版</button>
+      </div>
+
       <h2>用色统计</h2>
       <div class="stats" id="stats"></div>
       <h2>重复单元预览</h2>
+      <div class="hint" id="previewHint"></div>
       <div class="preview" id="preview"></div>
       <h2>断线风险</h2>
       <div id="risk"></div>
     </aside>
   </main>
   <script>
-    const colors = ["#f7e7c4","#a6322d","#1f5f78","#d6a437","#355b38","#713d7b","#1e1b18","#e98c52"];
-    const grid = document.querySelector("#grid");
-    const palette = document.querySelector("#palette");
-    const stats = document.querySelector("#stats");
-    const preview = document.querySelector("#preview");
-    const risk = document.querySelector("#risk");
-    let cols = 18, rows = 14, active = 1, block = "dot", dragging = false;
-    let cells = [];
-    let undo = [], redo = [];
-    function init(loadSaved = true) {
-      const saved = loadSaved && JSON.parse(localStorage.getItem("zfl31Pattern") || "null");
-      if (saved) { cols = saved.cols; rows = saved.rows; cells = saved.cells; }
-      else { cols = Number(document.querySelector("#cols").value); rows = Number(document.querySelector("#rows").value); cells = Array(cols * rows).fill(0); }
-      document.querySelector("#cols").value = cols; document.querySelector("#rows").value = rows;
+    "use strict";
+    // 0 号色为底布/空色
+    const colors = ["#f7e7c4", "#a6322d", "#1f5f78", "#d6a437", "#355b38", "#713d7b", "#1e1b18", "#e98c52"];
+    const EMPTY = 0;
+    const SAVE_KEY = "zfl31Pattern";
+
+    const $ = id => document.getElementById(id);
+    const gridEl = $("grid"), paletteEl = $("palette"), statsEl = $("stats"),
+          previewEl = $("preview"), riskEl = $("risk"), msgEl = $("message");
+
+    let cols = 18, rows = 14, active = 1, block = "dot";
+    let cells = [];          // 每格颜色索引
+    let locked = [];         // 每格是否锁定
+    let tool = "draw";       // draw | select | lock
+    // 选区（含端点，0 基）
+    let sel = null;          // {x0,y0,x1,y1}
+    // 剪贴板：矩形矩阵，EMPTY 表示透明
+    let clip = null;         // {w,h,data:[]}
+    let allowOver = false;
+    let undoStack = [], redoStack = [];
+
+    /* ---------- 工具函数 ---------- */
+    function idx(x, y) { return (x < 0 || x >= cols || y < 0 || y >= rows) ? -1 : y * cols + x; }
+    function xyOf(i) { return { x: i % cols, y: Math.floor(i / cols) }; }
+    function normSel(s) {
+      return { x0: Math.min(s.x0, s.x1), y0: Math.min(s.y0, s.y1),
+               x1: Math.max(s.x0, s.x1), y1: Math.max(s.y0, s.y1) };
+    }
+    function selSize(s) {
+      const n = normSel(s);
+      return { w: n.x1 - n.x0 + 1, h: n.y1 - n.y0 + 1 };
+    }
+    function selContainsLocked(s) {
+      const n = normSel(s);
+      for (let y = n.y0; y <= n.y1; y++)
+        for (let x = n.x0; x <= n.x1; x++)
+          if (locked[idx(x, y)]) return true;
+      return false;
+    }
+    function selEmpty(s) {
+      const n = normSel(s);
+      for (let y = n.y0; y <= n.y1; y++)
+        for (let x = n.x0; x <= n.x1; x++)
+          if (cells[idx(x, y)] !== EMPTY) return false;
+      return true;
+    }
+    function setMessage(text, kind) {
+      msgEl.textContent = text;
+      msgEl.className = kind || "info";
+    }
+
+    /* ---------- 历史（每次用户动作整体一条） ---------- */
+    function snapshot() {
+      undoStack.push({ cells: cells.slice(), locked: locked.slice(), sel: sel ? { ...sel } : null });
+      redoStack = [];
+      if (undoStack.length > 80) undoStack.shift();
+    }
+    function applyState(st) {
+      cells = st.cells.slice();
+      locked = st.locked.slice();
+      sel = st.sel ? { ...st.sel } : null;
       render();
+    }
+    function undo() {
+      if (!undoStack.length) { setMessage("没有可撤销的操作。", "warn"); return; }
+      redoStack.push({ cells: cells.slice(), locked: locked.slice(), sel: sel ? { ...sel } : null });
+      applyState(undoStack.pop());
+      setMessage("已撤销。", "ok");
+    }
+    function redo() {
+      if (!redoStack.length) { setMessage("没有可重做的操作。", "warn"); return; }
+      undoStack.push({ cells: cells.slice(), locked: locked.slice(), sel: sel ? { ...sel } : null });
+      applyState(redoStack.pop());
+      setMessage("已重做。", "ok");
+    }
+
+    /* ---------- 选区 / 剪贴板 ---------- */
+    function grabSelection(s) {
+      const n = normSel(s), w = n.x1 - n.x0 + 1, h = n.y1 - n.y0 + 1;
+      const data = new Array(w * h);
+      for (let y = 0; y < h; y++)
+        for (let x = 0; x < w; x++)
+          data[y * w + x] = cells[idx(n.x0 + x, n.y0 + y)];
+      return { w, h, data };
+    }
+    function clearRect(n) {
+      for (let y = n.y0; y <= n.y1; y++)
+        for (let x = n.x0; x <= n.x1; x++)
+          cells[idx(x, y)] = EMPTY;
+    }
+    // 计算一次铺放（可重复 repW×repH）的足迹与冲突；不修改画布
+    function planPlace(motif, ax, ay, repW, repH) {
+      const footW = motif.w * repW, footH = motif.h * repH;
+      const oob = [], lockedHit = [], occupied = [], targetCells = [];
+      for (let ry = 0; ry < repH; ry++) {
+        for (let rx = 0; rx < repW; rx++) {
+          for (let my = 0; my < motif.h; my++) {
+            for (let mx = 0; mx < motif.w; mx++) {
+              if (motif.data[my * motif.w + mx] === EMPTY) continue; // 透明格不参与
+              const x = ax + rx * motif.w + mx;
+              const y = ay + ry * motif.h + my;
+              if (x < 0 || x >= cols || y < 0 || y >= rows) { oob.push({ x, y }); continue; }
+              const i = idx(x, y);
+              targetCells.push(i);
+              if (locked[i]) lockedHit.push({ x, y });
+              else if (cells[i] !== EMPTY) occupied.push({ x, y });
+            }
+          }
+        }
+      }
+      return { footW, footH, oob, lockedHit, occupied, targetCells };
+    }
+    function placeCells(motif, ax, ay, repW, repH) {
+      for (let ry = 0; ry < repH; ry++)
+        for (let rx = 0; rx < repW; rx++)
+          for (let my = 0; my < motif.h; my++)
+            for (let mx = 0; mx < motif.w; mx++) {
+              const v = motif.data[my * motif.w + mx];
+              if (v === EMPTY) continue;
+              const x = ax + rx * motif.w + mx, y = ay + ry * motif.h + my;
+              if (x >= 0 && x < cols && y >= 0 && y < rows) cells[idx(x, y)] = v;
+            }
+    }
+    const pos = p => "第" + (p.y + 1) + "行第" + (p.x + 1) + "列";
+    function listPos(ps) {
+      const shown = ps.slice(0, 8).map(pos).join("、");
+      return ps.length > 8 ? shown + " 等" + ps.length + "处" : shown;
+    }
+    // 冲突提示；blocked=true 表示本次操作整体取消
+    function describeConflict(plan, opts) {
+      opts = opts || {};
+      const parts = [];
+      if (plan.oob.length)
+        parts.push("越界 " + plan.oob.length + " 格（" + listPos(plan.oob) + "）");
+      if (plan.lockedHit.length)
+        parts.push("锁定格冲突 " + plan.lockedHit.length + " 处（" + listPos(plan.lockedHit) + "）");
+      if (plan.occupied.length && !opts.overwrite)
+        parts.push("将覆盖已有纹样 " + plan.occupied.length + " 处（" + listPos(plan.occupied) + "）");
+      if (!parts.length) return "";
+      const lead = opts.lead || "无法执行";
+      return lead + "：" + parts.join("；") + "。未做任何改动，请调整位置/铺版数量，或勾选“允许覆盖”（锁定格仍不可覆盖）。";
+    }
+
+    /* ---------- 复制 / 剪切 ---------- */
+    function doCopy(silent) {
+      if (!sel) { setMessage("请先用框选工具拖出一个矩形选区。", "warn"); return; }
+      if (selEmpty(sel)) { setMessage("选区是空的，没有可复制的纹样。", "warn"); return; }
+      clip = grabSelection(sel);
+      syncPasteInputsToSel();
+      if (!silent) setMessage("已复制 " + clip.w + "×" + clip.h + " 纹样到剪贴板（锁定格内容可复制来源，但不能被剪切）。", "ok");
+      render();
+    }
+    function doCut() {
+      if (!sel) { setMessage("请先框选要剪切的矩形区域。", "warn"); return; }
+      if (selEmpty(sel)) { setMessage("选区是空的，没有可剪切的纹样。", "warn"); return; }
+      if (selContainsLocked(sel)) {
+        setMessage("选区内含有锁定格，不能剪切/移动。请先在锁格工具下解锁。", "warn");
+        render();
+        return;
+      }
+      snapshot();
+      clip = grabSelection(sel);
+      clearRect(normSel(sel));
+      syncPasteInputsToSel();
+      setMessage("已剪切到剪贴板，原区域已清空；可用“粘贴一次/铺版”放下。", "ok");
+      render();
+    }
+
+    /* ---------- 粘贴 / 铺版 ---------- */
+    function readAnchor() {
+      const ax = Math.floor(Number($("pasteX").value)) - 1;
+      const ay = Math.floor(Number($("pasteY").value)) - 1;
+      return { ax, ay };
+    }
+    function doPaste() {
+      if (!clip) { setMessage("剪贴板为空，请先复制或剪切。", "warn"); return; }
+      const { ax, ay } = readAnchor();
+      if (Number.isNaN(ax) || Number.isNaN(ay)) { setMessage("请填写有效的目标列、目标行。", "warn"); return; }
+      const plan = planPlace(clip, ax, ay, 1, 1);
+      const msg = describeConflict(plan, { overwrite: allowOver, lead: "无法粘贴" });
+      if (msg) { setMessage(msg, "warn"); render(); return; }
+      snapshot();
+      placeCells(clip, ax, ay, 1, 1);
+      sel = { x0: ax, y0: ay, x1: ax + clip.w - 1, y1: ay + clip.h - 1 };
+      setMessage("已在第" + (ay + 1) + "行第" + (ax + 1) + "列粘贴一次。", "ok");
+      render();
+    }
+    function doTile() {
+      if (!clip) { setMessage("剪贴板为空，请先复制或剪切。", "warn"); return; }
+      const repW = Math.floor(Number($("repCols").value));
+      const repH = Math.floor(Number($("repRows").value));
+      if (!repW || !repH || repW < 1 || repH < 1) { setMessage("铺版列数、行数必须是不小于 1 的整数。", "warn"); return; }
+      const { ax, ay } = readAnchor();
+      if (Number.isNaN(ax) || Number.isNaN(ay)) { setMessage("请填写有效的目标列、目标行。", "warn"); return; }
+      const plan = planPlace(clip, ax, ay, repW, repH);
+      const msg = describeConflict(plan, { overwrite: allowOver, lead: "无法铺版" });
+      if (msg) { setMessage(msg, "warn"); render(); return; }
+      if (repW === 1 && repH === 1) setMessage("提示：1×1 等于粘贴一次。", "info");
+      snapshot();
+      placeCells(clip, ax, ay, repW, repH);
+      sel = { x0: ax, y0: ay, x1: ax + plan.footW - 1, y1: ay + plan.footH - 1 };
+      setMessage("已按 " + repW + " 列 × " + repH + " 行铺版，共 " + repW * repH + " 个单元。", "ok");
+      render();
+    }
+
+    /* ---------- 移动 / 复制到指定位置（单次） ---------- */
+    function moveOrCopyTo(copy) {
+      if (!sel) { setMessage("请先框选纹样。", "warn"); return; }
+      if (selEmpty(sel)) { setMessage("选区是空的，没有可" + (copy ? "复制" : "移动") + "的纹样。", "warn"); return; }
+      if (!copy && selContainsLocked(sel)) {
+        setMessage("选区内含锁定格，不能移动；可改用“复制到…”。", "warn"); render(); return;
+      }
+      const { ax, ay } = readAnchor();
+      if (Number.isNaN(ax) || Number.isNaN(ay)) { setMessage("请填写有效的目标列、目标行。", "warn"); return; }
+      const motif = grabSelection(sel);
+      const n = normSel(sel);
+      // 移动时，落在原选区范围内的目标格视为“原位”，不算覆盖
+      const plan = planPlace(motif, ax, ay, 1, 1);
+      const occupied = plan.occupied.filter(p => !(p.x >= n.x0 && p.x <= n.x1 && p.y >= n.y0 && p.y <= n.y1));
+      const adjusted = { ...plan, occupied };
+      const msg = describeConflict(adjusted, { overwrite: allowOver, lead: copy ? "无法复制" : "无法移动" });
+      if (msg) { setMessage(msg, "warn"); render(); return; }
+      snapshot();
+      if (!copy) clearRect(n);
+      placeCells(motif, ax, ay, 1, 1);
+      sel = { x0: ax, y0: ay, x1: ax + motif.w - 1, y1: ay + motif.h - 1 };
+      setMessage((copy ? "已复制" : "已移动") + "到第" + (ay + 1) + "行第" + (ax + 1) + "列。", "ok");
+      render();
+    }
+
+    /* ---------- 翻转 / 旋转 ---------- */
+    function transform(kind) {
+      if (!sel) { setMessage("请先框选要变换的矩形区域。", "warn"); return; }
+      if (selEmpty(sel)) { setMessage("选区是空的，没有可变换的纹样。", "warn"); return; }
+      if (selContainsLocked(sel)) {
+        setMessage("选区内含有锁定格，锁定格不能被翻转或旋转。", "warn"); render(); return;
+      }
+      const n = normSel(sel), w = n.x1 - n.x0 + 1, h = n.y1 - n.y0 + 1;
+      const src = grabSelection(n);
+      let nw, nh, nd;
+      if (kind === "flipH") {
+        nw = w; nh = h;
+        nd = src.data.map((v, i) => { const x = i % w, y = Math.floor(i / w); return src.data[y * w + (w - 1 - x)]; });
+      } else if (kind === "flipV") {
+        nw = w; nh = h;
+        nd = src.data.map((v, i) => { const x = i % w, y = Math.floor(i / w); return src.data[(h - 1 - y) * w + x]; });
+      } else { // 顺时针 90°：宽高互换
+        nw = h; nh = w;
+        nd = new Array(nw * nh);
+        for (let y = 0; y < h; y++)
+          for (let x = 0; x < w; x++)
+            nd[x * nw + (nw - 1 - y)] = src.data[y * w + x];
+      }
+      const motif = { w: nw, h: nh, data: nd };
+      // 保持选区左上角不变；变换后形状可能改变，需重新检查越界与覆盖。
+      // 原选区内的占用不算冲突（整块会先清空，且已确认不含锁定格）；只有“新长出来”的区域才需要检查。
+      const plan0 = planPlace(motif, n.x0, n.y0, 1, 1);
+      const plan = { ...plan0, occupied: plan0.occupied.filter(p => !(p.x >= n.x0 && p.x <= n.x1 && p.y >= n.y0 && p.y <= n.y1)) };
+      const msg = describeConflict(plan, {
+        overwrite: allowOver,
+        lead: kind === "rot" ? "无法顺时针旋转" : (kind === "flipH" ? "无法水平翻转" : "无法垂直翻转")
+      });
+      if (msg) {
+        setMessage(msg + "（旋转后尺寸为 " + nw + "×" + nh + "。）", "warn");
+        render(); return;
+      }
+      snapshot();
+      clearRect(n);
+      placeCells(motif, n.x0, n.y0, 1, 1);
+      sel = { x0: n.x0, y0: n.y0, x1: n.x0 + nw - 1, y1: n.y0 + nh - 1 };
+      const name = kind === "rot" ? "顺时针旋转" : kind === "flipH" ? "水平翻转" : "垂直翻转";
+      setMessage("已" + name + "，新尺寸 " + nw + " 列 × " + nh + " 行。", "ok");
+      render();
+    }
+
+    /* ---------- 拖拽：框选 / 移动选区 / Alt 复制 ---------- */
+    let drag = null; // {mode, startX,startY, lastX,lastY, moved}
+    function eventCell(ev) {
+      const el = document.elementFromPoint(ev.clientX, ev.clientY);
+      if (!el || !el.classList || !el.classList.contains("cell")) return null;
+      const i = Number(el.dataset.i);
+      return Number.isNaN(i) ? null : xyOf(i);
+    }
+    function onPointerDown(ev) {
+      const p = eventCell(ev);
+      if (!p) return;
+      const i = idx(p.x, p.y);
+      if (tool === "draw") {
+        if (locked[i]) { setMessage("第" + (p.y + 1) + "行第" + (p.x + 1) + "列是锁定格，不能绘制；如需修改请先解锁。", "warn"); return; }
+        drag = { mode: "paint", painted: 0, skipped: [] };
+        paintAt(p.x, p.y, drag);
+      } else if (tool === "lock") {
+        snapshot();
+        locked[i] = !locked[i];
+        setMessage(locked[i] ? "已锁定该格（不可移动、翻转、覆盖或铺版改变）。" : "已解锁该格。", "ok");
+        render();
+      } else { // select
+        if (sel && insideSel(p.x, p.y, normSel(sel)) && !selEmpty(sel)) {
+          // 从已有选区内部起拖：移动（Alt 复制）
+          const blocked = !ev.altKey && selContainsLocked(sel);
+          if (blocked) { setMessage("选区内含锁定格，不能拖动移动；可按住 Alt/Option 拖动复制。", "warn"); return; }
+          const n = normSel(sel);
+          drag = {
+            mode: ev.altKey ? "copy" : "move",
+            motif: grabSelection(n), src: n,
+            startX: p.x, startY: p.y, curX: p.x, curY: p.y, moved: false
+          };
+        } else {
+          drag = { mode: "marquee", x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+          sel = { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+        }
+        render();
+      }
+    }
+    function insideSel(x, y, n) { return x >= n.x0 && x <= n.x1 && y >= n.y0 && y <= n.y1; }
+    function onPointerMove(ev) {
+      if (!drag) return;
+      const p = eventCell(ev);
+      if (!p) return;
+      if (drag.mode === "paint") paintAt(p.x, p.y, drag);
+      else if (drag.mode === "marquee") {
+        if (p.x !== drag.x1 || p.y !== drag.y1) { drag.x1 = p.x; drag.y1 = p.y; sel = { ...drag }; render(); }
+      } else if (drag.mode === "move" || drag.mode === "copy") {
+        if (p.x !== drag.curX || p.y !== drag.curY) { drag.curX = p.x; drag.curY = p.y; drag.moved = true; render(); }
+      }
+    }
+    function onPointerUp() {
+      if (!drag) return;
+      const d = drag; drag = null;
+      if (d.mode === "paint") {
+        if (d.painted === 0 && d.skipped.length)
+          setMessage("拖动经过的都是锁定格，未填入任何颜色。", "warn");
+        else if (d.skipped.length)
+          setMessage("已连续填色；跳过了 " + d.skipped.length + " 个锁定格。", "info");
+        else if (d.painted) setMessage("已填入 " + d.painted + " 格。", "ok");
+        render();
+        return;
+      }
+      if (d.mode === "marquee") {
+        const z = selSize(sel);
+        setMessage("已框选 " + z.w + " 列 × " + z.h + " 行（自第" + (normSel(sel).y0 + 1) + "行第" + (normSel(sel).x0 + 1) + "列起）。", "info");
+        render();
+        return;
+      }
+      if ((d.mode === "move" || d.mode === "copy") && d.moved) commitDrag(d);
+      else render();
+    }
+    function commitDrag(d) {
+      const ax = d.src.x0 + (d.curX - d.startX);
+      const ay = d.src.y0 + (d.curY - d.startY);
+      const plan = planPlace(d.motif, ax, ay, 1, 1);
+      // 移动时忽略原选区内部的“占用”
+      const occupied = plan.occupied.filter(p => !(p.x >= d.src.x0 && p.x <= d.src.x1 && p.y >= d.src.y0 && p.y <= d.src.y1));
+      const problems = [];
+      if (plan.oob.length) problems.push("越界 " + plan.oob.length + " 格（" + listPos(plan.oob) + "）");
+      if (plan.lockedHit.length) problems.push("锁定格冲突 " + plan.lockedHit.length + " 处（" + listPos(plan.lockedHit) + "）");
+      if (occupied.length && !allowOver) problems.push("覆盖已有纹样 " + occupied.length + " 处（" + listPos(occupied) + "）");
+      if (problems.length) {
+        setMessage("已松手，但" + (d.mode === "copy" ? "复制" : "移动") + "被取消：" + problems.join("；") +
+          "。画布未改动，可勾选“允许覆盖”后重试。", "warn");
+        render(); return;
+      }
+      snapshot();
+      if (d.mode === "move") clearRect(d.src);
+      placeCells(d.motif, ax, ay, 1, 1);
+      sel = { x0: ax, y0: ay, x1: ax + d.motif.w - 1, y1: ay + d.motif.h - 1 };
+      setMessage((d.mode === "copy" ? "已复制" : "已移动") + "到第" + (ay + 1) + "行第" + (ax + 1) + "列。", "ok");
+      render();
+    }
+
+    /* ---------- 绘制 ---------- */
+    function stampTargets(x, y) {
+      if (block === "cross") return [idx(x, y), idx(x - 1, y), idx(x + 1, y), idx(x, y - 1), idx(x, y + 1)];
+      if (block === "diamond") return [idx(x, y - 1), idx(x - 1, y), idx(x, y), idx(x + 1, y), idx(x, y + 1)];
+      return [idx(x, y)];
+    }
+    function paintAt(x, y, d) {
+      const targets = stampTargets(x, y).filter(t => t >= 0);
+      const writable = targets.filter(t => !locked[t]);
+      const changed = writable.some(t => cells[t] !== active);
+      if (changed) {
+        if (!d.snapshotted) { snapshot(); d.snapshotted = true; } // 一次拖动笔画整体一条撤销
+        writable.forEach(t => cells[t] = active);
+        d.painted += writable.length;
+      }
+      targets.forEach(t => { if (locked[t] && d.skipped.indexOf(t) < 0) d.skipped.push(t); });
+      render();
+    }
+
+    /* ---------- 渲染 ---------- */
+    function dragGhost() {
+      if (!drag || (drag.mode !== "move" && drag.mode !== "copy") || !drag.moved) return null;
+      const ax = drag.src.x0 + (drag.curX - drag.startX);
+      const ay = drag.src.y0 + (drag.curY - drag.startY);
+      return { motif: drag.motif, ax, ay, src: drag.src, mode: drag.mode };
     }
     function render() {
-      palette.innerHTML = colors.map((c, i) => '<button class="swatch '+(i===active?'active':'')+'" data-color="'+i+'" style="background:'+c+'"></button>').join("");
-      palette.querySelectorAll("[data-color]").forEach(el => el.onclick = () => { active = Number(el.dataset.color); render(); });
-      grid.style.gridTemplateColumns = "repeat("+cols+", 1fr)";
-      grid.innerHTML = cells.map((v, i) => '<div class="cell" data-i="'+i+'" style="background:'+colors[v]+'"></div>').join("");
-      grid.querySelectorAll(".cell").forEach(el => {
-        el.onpointerdown = () => { dragging = true; paint(Number(el.dataset.i)); };
-        el.onpointerenter = () => { if (dragging) paint(Number(el.dataset.i)); };
-      });
-      window.onpointerup = () => dragging = false;
+      // 色线库
+      paletteEl.innerHTML = colors.map((c, i) =>
+        '<button type="button" class="swatch ' + (i === active ? "active" : "") + '" data-color="' + i +
+        '" style="background:' + c + '" title="色线' + i + (i === 0 ? "（底布/擦除）" : "") + '"></button>').join("");
+
+      gridEl.style.gridTemplateColumns = "repeat(" + cols + ", 1fr)";
+      const n = sel ? normSel(sel) : null;
+      const ghost = dragGhost();
+      let ghostPlan = null, ghostMap = new Set(), conflictSet = new Set();
+      if (ghost) {
+        ghostPlan = planPlace(ghost.motif, ghost.ax, ghost.ay, 1, 1);
+        ghostPlan.targetCells.forEach(t => {
+          const p = xyOf(t);
+          if (ghost.mode === "move" && p.x >= ghost.src.x0 && p.x <= ghost.src.x1 && p.y >= ghost.src.y0 && p.y <= ghost.src.y1) return;
+          ghostMap.add(t);
+        });
+        ghostPlan.oob.forEach(() => {});
+        ghostPlan.lockedHit.forEach(p => conflictSet.add(idx(p.x, p.y)));
+        ghostPlan.occupied.forEach(p => {
+          const t = idx(p.x, p.y);
+          if (ghost.mode === "move" && p.x >= ghost.src.x0 && p.x <= ghost.src.x1 && p.y >= ghost.src.y0 && p.y <= ghost.src.y1) return;
+          if (!allowOver) conflictSet.add(t);
+        });
+        // 越界范围无法在格上标，信息条里提示
+        if (ghostPlan.oob.length) setMessage("部分纹样超出画布边界（" + ghostPlan.oob.length + " 格），松手将取消。", "warn");
+        else if (ghostPlan.lockedHit.length || (ghostPlan.occupied.length && !allowOver))
+          setMessage("目标处存在锁定格或已有纹样，松手将取消（可勾选允许覆盖）。", "warn");
+      }
+
+      let html = "";
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          const i = idx(x, y);
+          const cls = ["cell"];
+          if (locked[i]) cls.push("locked");
+          if (n && x >= n.x0 && x <= n.x1 && y >= n.y0 && y <= n.y1) cls.push("sel");
+          if (ghost && ghost.mode === "move" && x >= ghost.src.x0 && x <= ghost.src.x1 && y >= ghost.src.y0 && y <= ghost.src.y1) cls.push("src");
+          if (ghostMap.has(i)) cls.push("ghost");
+          if (conflictSet.has(i)) cls.push("conflict");
+          html += '<div class="' + cls.join(" ") + '" data-i="' + i + '" style="background:' + colors[cells[i]] + '"></div>';
+        }
+      }
+      gridEl.innerHTML = html;
+
+      renderSide();
+    }
+    function renderSide() {
+      // 工具按钮
+      $("toolDraw").className = tool === "draw" ? "active" : "";
+      $("toolSelect").className = tool === "select" ? "active" : "secondary";
+      $("toolLock").className = tool === "lock" ? "active" : "secondary";
+      $("toolHint").textContent =
+        tool === "draw" ? "绘制工具：单击或拖动逐格填色；0 号底布色可擦除，锁定格自动跳过。" :
+        tool === "select" ? "框选工具：空白处拖动建选区；在选区内部拖动移动，按住 Alt/Option 拖动复制。" :
+        "锁格工具：单击格子切换锁定。锁定格不能被移动、翻转、覆盖或随铺版改变。";
+
+      const hasSel = !!sel, hasContent = hasSel && !selEmpty(sel);
+      $("copyBtn").disabled = !hasContent;
+      $("cutBtn").disabled = !hasContent;
+      $("moveSelBtn").disabled = !hasContent;
+      $("copySelBtn").disabled = !hasContent;
+      ["flipHBtn", "flipVBtn", "rotBtn"].forEach(id => $(id).disabled = !hasContent);
+      $("pasteBtn").disabled = !clip;
+      $("tileBtn").disabled = !clip;
+
+      if (sel) {
+        const n = normSel(sel), z = selSize(sel);
+        $("selInfo").textContent = "选区 " + z.w + "×" + z.h +
+          "，自第" + (n.y0 + 1) + "行第" + (n.x0 + 1) + "列起" +
+          (selContainsLocked(sel) ? "（含锁定格：禁止剪切/移动/翻转旋转）" : "");
+      } else {
+        $("selInfo").textContent = "尚未框选。";
+      }
+
+      if (clip) {
+        $("clipInfo").textContent = "剪贴板纹样：" + clip.w + " 列 × " + clip.h + " 行。";
+        $("clipPreview").style.gridTemplateColumns = "repeat(" + Math.min(clip.w, 8) + ", 1fr)";
+        let cp = "";
+        for (let y = 0; y < clip.h; y++)
+          for (let x = 0; x < clip.w; x++)
+            cp += '<div class="mini" style="background:' + colors[clip.data[y * clip.w + x]] + '"></div>';
+        $("clipPreview").innerHTML = cp;
+      } else {
+        $("clipInfo").textContent = "剪贴板为空。";
+        $("clipPreview").innerHTML = "";
+      }
+
       renderStats();
     }
-    function snapshot() { undo.push([...cells]); redo = []; if (undo.length > 50) undo.shift(); }
-    function paint(i) {
-      snapshot();
-      const targets = pattern(i);
-      targets.forEach(t => { if (t >= 0 && t < cells.length) cells[t] = active; });
-      render();
-    }
-    function pattern(i) {
-      const x = i % cols, y = Math.floor(i / cols);
-      if (block === "cross") return [i, idx(x-1,y), idx(x+1,y), idx(x,y-1), idx(x,y+1)].filter(v => v !== null);
-      if (block === "diamond") return [idx(x,y-1), idx(x-1,y), i, idx(x+1,y), idx(x,y+1)].filter(v => v !== null);
-      return [i];
-    }
-    function idx(x,y) { return x < 0 || x >= cols || y < 0 || y >= rows ? null : y * cols + x; }
     function renderStats() {
-      const counts = colors.map((_, i) => cells.filter(v => v === i).length);
-      stats.innerHTML = counts.map((n, i) => '<div class="stat"><span><span style="display:inline-block;width:14px;height:14px;background:'+colors[i]+'"></span> 色线'+i+'</span><b>'+n+'</b></div>').join("");
-      preview.innerHTML = Array.from({length: 36}, (_, i) => '<div class="mini" style="background:'+colors[cells[(i % 6) + Math.floor(i / 6) * cols] || colors[0]]+'"></div>').join("");
+      const counts = colors.map((_, i) => cells.reduce((n, v) => n + (v === i ? 1 : 0), 0));
+      const total = cells.length - counts[0];
+      statsEl.innerHTML =
+        '<div class="stat"><span>已用格 / 总格</span><b>' + total + " / " + cells.length + "</b></div>" +
+        '<div class="stat"><span>锁定格</span><b>' + locked.filter(Boolean).length + "</b></div>" +
+        counts.map((n, i) =>
+          '<div class="stat"><span><span style="display:inline-block;width:14px;height:14px;background:' +
+          colors[i] + ';border:1px solid #c9bdae"></span> 色线' + i + (i === 0 ? "（底布）" : "") + "</span><b>" + n + "</b></div>").join("");
+
+      // 重复单元预览：优先用剪贴板平铺，否则显示画布左上角 6×6
+      if (clip) {
+        $("previewHint").textContent = "按剪贴板单元（" + clip.w + "×" + clip.h + "）平铺预览：";
+        previewEl.innerHTML = Array.from({ length: 36 }, (_, k) => {
+          const x = k % 6, y = Math.floor(k / 6);
+          const v = clip.data[(y % clip.h) * clip.w + (x % clip.w)];
+          return '<div class="mini" style="background:' + colors[v] + '"></div>';
+        }).join("");
+      } else {
+        $("previewHint").textContent = "画布左上角 6×6 重复单元预览：";
+        previewEl.innerHTML = Array.from({ length: 36 }, (_, k) => {
+          const x = k % 6, y = Math.floor(k / 6);
+          const v = (x < cols && y < rows) ? cells[idx(x, y)] : EMPTY;
+          return '<div class="mini" style="background:' + colors[v] + '"></div>';
+        }).join("");
+      }
+
+      // 断线风险：某行换色次数过多（沿用旧规则，底布也算颜色切换）
       const riskRows = [];
       for (let y = 0; y < rows; y++) {
-        let switches = 0;
-        for (let x = 1; x < cols; x++) if (cells[y*cols+x] !== cells[y*cols+x-1]) switches++;
-        if (switches > cols * .62) riskRows.push(y + 1);
+        let sw = 0;
+        for (let x = 1; x < cols; x++) if (cells[y * cols + x] !== cells[y * cols + x - 1]) sw++;
+        if (sw > cols * 0.62) riskRows.push(y + 1);
       }
-      risk.innerHTML = riskRows.length ? '<p class="warning">第'+riskRows.join("、")+'行换色过密，可能断线。</p>' : '<p>暂无明显断线风险。</p>';
+      riskEl.innerHTML = riskRows.length
+        ? '<p class="warning">第' + riskRows.join("、") + '行换色过密，织造时可能断线。</p>'
+        : '<p>暂无明显断线风险。</p>';
     }
-    document.querySelectorAll("[data-block]").forEach(btn => btn.onclick = () => block = btn.dataset.block);
-    document.querySelector("#newBtn").onclick = () => { undo = []; redo = []; init(false); };
-    document.querySelector("#undoBtn").onclick = () => { if (!undo.length) return; redo.push([...cells]); cells = undo.pop(); render(); };
-    document.querySelector("#redoBtn").onclick = () => { if (!redo.length) return; undo.push([...cells]); cells = redo.pop(); render(); };
-    document.querySelector("#saveBtn").onclick = () => localStorage.setItem("zfl31Pattern", JSON.stringify({ cols, rows, cells }));
-    document.querySelector("#exportBtn").onclick = () => {
-      const data = { cols, rows, cells, usage: colors.map((color, i) => ({ color, count: cells.filter(v => v === i).length })) };
+    function syncPasteInputsToSel() {
+      if (sel) { const n = normSel(sel); $("pasteX").value = n.x0 + 1; $("pasteY").value = n.y0 + 1; }
+    }
+
+    /* ---------- 初始化 / 保存 ---------- */
+    function blank(w, h) {
+      cols = w; rows = h;
+      cells = new Array(cols * rows).fill(EMPTY);
+      locked = new Array(cols * rows).fill(false);
+      sel = null; clip = null; undoStack = []; redoStack = [];
+    }
+    function init(loadSaved) {
+      const raw = loadSaved ? localStorage.getItem(SAVE_KEY) : null;
+      const saved = raw ? JSON.parse(raw) : null;
+      if (saved && Array.isArray(saved.cells) && saved.cells.length === saved.cols * saved.rows) {
+        // 旧版本只有 {cols,rows,cells}：locked 缺失则全部视为未锁定，纹样原样打开
+        cols = saved.cols; rows = saved.rows;
+        cells = saved.cells.slice();
+        locked = Array.isArray(saved.locked) && saved.locked.length === cells.length
+          ? saved.locked.map(Boolean) : new Array(cells.length).fill(false);
+        sel = null; clip = null; undoStack = []; redoStack = [];
+        setMessage("已还原保存的方案（" + cols + "×" + rows + "，锁定 " + locked.filter(Boolean).length + " 格）。", "ok");
+      } else {
+        blank(Number($("cols").value) || 18, Number($("rows").value) || 14);
+        setMessage("新画布。", "info");
+      }
+      $("cols").value = cols; $("rows").value = rows;
+      render();
+    }
+    function save() {
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 2, cols, rows, cells, locked }));
+      setMessage("方案已保存，重开页面可完整还原（含锁定状态）。", "ok");
+    }
+    function exportJson() {
+      const data = {
+        version: 2, cols, rows, cells, locked,
+        usage: colors.map((color, i) => ({ color, count: cells.reduce((n, v) => n + (v === i ? 1 : 0), 0) }))
+      };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "brocade-pattern.json"; a.click(); URL.revokeObjectURL(a.href);
-    };
-    init();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "brocade-pattern.json";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    /* ---------- 事件绑定 ---------- */
+    gridEl.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+
+    paletteEl.addEventListener("click", ev => {
+      const b = ev.target.closest("[data-color]");
+      if (b) { active = Number(b.dataset.color); render(); }
+    });
+    document.querySelectorAll("[data-block]").forEach(btn =>
+      btn.addEventListener("click", () => { block = btn.dataset.block; setMessage("已选择基础纹样块：" + btn.textContent + "。", "info"); }));
+
+    $("toolDraw").addEventListener("click", () => { tool = "draw"; render(); });
+    $("toolSelect").addEventListener("click", () => { tool = "select"; render(); });
+    $("toolLock").addEventListener("click", () => { tool = "lock"; render(); });
+
+    $("newBtn").addEventListener("click", () => {
+      const w = Math.floor(Number($("cols").value)), h = Math.floor(Number($("rows").value));
+      if (!w || !h || w < 6 || h < 6 || w > 36 || h > 32) { setMessage("列数需在 6–36、行数需在 6–32 之间。", "warn"); return; }
+      blank(w, h);
+      $("pasteX").value = 1; $("pasteY").value = 1; $("repCols").value = 1; $("repRows").value = 1;
+      setMessage("已新建 " + w + "×" + h + " 空白网格。", "ok");
+      render();
+    });
+    $("undoBtn").addEventListener("click", undo);
+    $("redoBtn").addEventListener("click", redo);
+    $("saveBtn").addEventListener("click", save);
+    $("exportBtn").addEventListener("click", exportJson);
+
+    $("copyBtn").addEventListener("click", () => doCopy(false));
+    $("cutBtn").addEventListener("click", doCut);
+    $("pasteBtn").addEventListener("click", doPaste);
+    $("tileBtn").addEventListener("click", doTile);
+    $("moveSelBtn").addEventListener("click", () => moveOrCopyTo(false));
+    $("copySelBtn").addEventListener("click", () => moveOrCopyTo(true));
+    $("flipHBtn").addEventListener("click", () => transform("flipH"));
+    $("flipVBtn").addEventListener("click", () => transform("flipV"));
+    $("rotBtn").addEventListener("click", () => transform("rot"));
+    $("allowOver").addEventListener("change", ev => { allowOver = ev.target.checked; render(); });
+
+    init(true);
   </script>
 </body>
 </html>
